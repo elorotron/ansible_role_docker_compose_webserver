@@ -1,0 +1,88 @@
+---
+# tasks file for webserver
+#========================Git, docker, docker-compose installation, clone repo========================================
+- name: Add Docker GPG apt Key
+  apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+  when: ansible_os_family == 'Debian' 
+
+- name: Add Docker Repository
+  apt_repository:
+    repo: deb https://download.docker.com/linux/ubuntu focal stable
+    state: present
+  when: ansible_os_family == 'Debian'
+
+- name: Install required dependences
+  apt:
+    name:
+      - git
+      - python3-pip
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+    update_cache: true
+  when: ansible_os_family == 'Debian' 
+
+- name: Install docker on amazon linux
+  yum:
+    name:
+      - python3-pip
+      - git
+      - docker
+    update_cache: true
+    state: present
+  when: ansible_os_family == 'RedHat'
+
+- name: Check if docker-compose already exists on amazon linux 2
+  stat:
+    path: /usr/local/bin/docker-compose
+  register: docker_compose_stat
+  when: ansible_os_family == 'RedHat'
+
+- name: Get latest docker-compose distribution
+  uri:
+    url: https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64
+    method: GET
+    dest: /usr/local/bin/docker-compose
+    mode: ugo+x
+  when: ansible_os_family == 'RedHat' and docker_compose_stat.stat.exists == false
+
+- name: Clone Docker Compose files from GitHub
+  git:
+    repo: https://github.com/elorotron/docker_webserver.git
+    dest: /workdir/webserver
+
+- name: Enable services
+  service:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Install Docker Module for Python
+  pip:
+    name:
+      - docker
+      - docker-compose
+
+- name: Update OpenSSL
+  yum:
+    name: openssl
+    state: latest
+  when: ansible_os_family == 'RedHat'
+
+- name: Install or Upgrade urllib3
+  pip:
+    name: urllib3==1.25.11
+    state: present
+
+#=====================Start docker-compose================
+
+- name: Build docker-compose
+  community.docker.docker_compose:
+    project_src: /workdir/webserver/docker_compose
+    files:
+      - docker-compose.yml
